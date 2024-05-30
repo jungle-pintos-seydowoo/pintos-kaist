@@ -1,8 +1,12 @@
 # Ignore all
-*
+# *
 
 # Unignore all with extensions
 !*.*
+!Makefile
+!activate
+!LICENSE
+!
 
 # Unignore all dirs
 !*/
