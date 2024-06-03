@@ -4,6 +4,13 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+/* 추가 */
+unsigned hash_func (const struct hash_elem *e,void *aux);
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+struct page * spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED);
+bool spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED);
+/* 추가 */
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -61,22 +68,33 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
+// spt에서 va에 해당하는 page를 찾아서 반환.
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
 
-	return page;
+	page = malloc(sizeof(struct page));
+	struct hash_elem *e;
+
+	// va에 해당하는 hash_elem 찾기
+	page->va = va;
+	e = hash_find(&spt, &page->bucket_elem);
+
+	// 있으면 e에 해당하는 페이지 반환
+	return e != NULL ? hash_entry(e, struct page, bucket_elem) : NULL;
+
 }
 
 /* Insert PAGE into spt with validation. */
+// page를 spt에 삽입.
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
 
-	return succ;
+	return hash_insert(&spt, &page->bucket_elem) == NULL ? true : false; // 존재하지 않을 경우에만 삽입
 }
 
 void
@@ -174,6 +192,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init(spt, hash_func, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -187,4 +206,19 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+// 가상 주소를 해시 값으로 변환하여 해시 테이블에서 빠르게 검색할 수 있도록
+unsigned hash_func (const struct hash_elem *e,void *aux)
+{
+	const struct page *p = hash_entry(e, struct page, bucket_elem);
+	return hash_bytes(&p->va, sizeof p->va);
+}
+
+// 두 가상 주소를 비교해서 해시 테이블에서 키의 순서 결정.
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
+{
+	const struct page *a = hash_entry(a_, struct page, bucket_elem);
+	const struct page *b = hash_entry(b_, struct page, bucket_elem);
+	return a->va  < b->va;
 }
