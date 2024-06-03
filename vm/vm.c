@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "include/lib/kernel/hash.h"
+#include "include/lib/kernel/list.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -71,8 +72,16 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+	page = malloc(sizeof(struct page));
 
-	return page;
+	struct hash_elem *e;
+
+	/* 할당한 page의 va 값 할당 후, 해당 va에 해당하는 elem 찾기 */
+	page->va = va;
+	e = hash_find(&spt, &page->bucket_elem);
+	/* hash_elem이 page 내에 있어서 여기서 free(page)하면 안 되겠는데, 나중에도 안 해줘도 되나??? */
+	/* 해당하는 hash_elem이 있으면, 그 hash_entry로 해당 페이지 반환 */
+	return e != NULL ? hash_entry(e, struct page, bucket_elem) : NULL;
 }
 
 /* Insert PAGE into spt with validation. */
@@ -80,10 +89,11 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
-	int succ = false;
-	/* TODO: Fill this function. */
+	/* 유효성 검사?: 동일한 va값이 있으면 안 되기 때문에 spt에 삽입할 page의 va값이 있는지 검사 = hash_insert에서 해줌 */
 
-	return succ;
+	/* hash_insert를 해서 동일 va값이 없었다면, 즉 반환값이 NULL이라면 삽입 성공 true 반환 */
+	/* 동일한 va값이 존재한다면, 반환값이 NULL이 아니기 떄문에 false 반환 */
+	return hash_insert(&spt->spt_hash, &page->bucket_elem) == NULL ? true : false;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
@@ -204,9 +214,10 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 	 * TODO: writeback all the modified contents to the storage. */
 }
 
-/* --------- 추가 함수 ---------- */
+/* --------- 추가 함수 --------- */
 uint64_t hash_func(const struct hash_elem *e, void *aux)
 {
+	/* 해싱하는 함수 */
 	/* hash_elem으로 page 가져오기 */
 	const struct page *page_ = hash_entry(e, struct page, bucket_elem);
 	/* page의 va(가상주소)를 key값으로 해 해싱한 후 bucket_idx 값 반환 */

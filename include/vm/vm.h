@@ -95,7 +95,7 @@ struct page_operations
 struct supplemental_page_table
 {
 	/* 보충 페이지 테이블 = 페이지에 대한 추가 정보를 담아서 관리하도록 = 해시 테이블 자료구조 활용 */
-	struct hash vm_hash;
+	struct hash spt_hash;
 };
 
 #include "threads/thread.h"
