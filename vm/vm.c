@@ -64,19 +64,23 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	
+	// 깡통 페이지 만들기
+	page = malloc(sizeof(struct page));
+	struct hash_elem *e;
+	page->va = va;
+	// 
+	e = hash_find(&spt, &page->bucket_elem);
 
-	return page;
+	return e != NULL ? hash_entry(e, struct page, bucket_elem) : NULL;
 }
 
-/* Insert PAGE into spt with validation. */
+/* 주소 유효성 검사 후 헤시테이블에 page 삽입 */
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
-	int succ = false;
-	/* TODO: Fill this function. */
 
-	return succ;
+	return hash_insert(&spt->spt_hash, &page->bucket_elem) == NULL ? true : false;
 }
 
 void
@@ -174,6 +178,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init(spt, hash_func, less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -187,4 +192,22 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+/* page p를 위한 해시값 반환 */
+unsigned
+hash_func(const struct hash_elem *p_, void *aux UNUSED)
+{
+    const struct page *p = hash_entry(p_, struct page, bucket_elem);
+    return hash_bytes(&p->va, sizeof p->va);
+}
+
+/* Returns true if page a precedes page b. */
+bool less_func(const struct hash_elem *a_,
+               const struct hash_elem *b_, void *aux UNUSED)
+{
+    const struct page *a = hash_entry(a_, struct page, bucket_elem);
+    const struct page *b = hash_entry(b_, struct page, bucket_elem);
+
+    return a->va < b->va;
 }
