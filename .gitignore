@@ -6,7 +6,6 @@
 !Makefile
 !activate
 !LICENSE
-!
 
 # Unignore all dirs
 !*/
