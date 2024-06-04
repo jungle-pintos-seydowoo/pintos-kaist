@@ -1,9 +1,13 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
-#include "vm/vm.h"
-
 #include "threads/malloc.h"
+#include "include/vm/vm.h"
 #include "vm/inspect.h"
+#include "include/lib/kernel/hash.h"
+#include "include/lib/kernel/list.h"
+#include "include/threads/vaddr.h"
+#include "include/threads/mmu.h"
+
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -64,11 +68,12 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
         page_initializer = anon_initializer;
         break;
       case VM_FILE:
-        page_initializer = file_backed_initializer break;
+        page_initializer = file_backed_initializer;
+		break;
     }
 
     // 3) "uninit" 타입의 페이지로 초기화
-    uninit(p, upage, init, type, aux, page_initializer);
+    uninit_new(p, upage, init, type, aux, page_initializer);
     p->writable = writable;
 
 	// 4) 생성한 페이지를 spt 에 추가
