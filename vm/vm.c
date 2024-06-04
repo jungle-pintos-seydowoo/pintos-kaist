@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "include/threads/mmu.h"
 
 /* 추가 */
 unsigned hash_func (const struct hash_elem *e,void *aux);
@@ -79,6 +80,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 
 	// va에 해당하는 hash_elem 찾기
 	page->va = va;
+	
 	e = hash_find(&spt, &page->bucket_elem);
 
 	// 있으면 e에 해당하는 페이지 반환
@@ -126,13 +128,34 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+/* 페이지 할당 */
 static struct frame *
 vm_get_frame (void) {
+	// 1. 프레임 포인터 초기화
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 
+	// 2. 사용자 풀에서 물리 페이지 할당
+	void *kva = palloc_get_page(PAL_USER); // 커널 풀 대신에  사용자 풀에서 메모리를 할당하는 이유
+										   // 커널 풀의 페이지가 부족 > 커널 함수들이 메모리 확보 문제 > 큰 문제 발생 
+
+	// 3. 페이지 할당 실패 처리
+	if(kva == NULL)
+	{
+		PANIC("todo"); // 나중에는 swap out 기능을 구현한 후에는 이 부분 수정 예정
+	}
+
+	// 4. 프레임 구조체 할당
+	frame = malloc(sizeof(struct frame)); // 페이지 사이즈만큼 메모리 할당
+
+	// 5. 프레임 멤버 초기화
+	frame->kva = kva;  
+
+	// 6. 유효성 검사
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
+
+	// 7. 프레임 반환
 	return frame;
 }
 
@@ -167,25 +190,42 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+/* 페이지에 va 할당.*/
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
 
+	// 1. spt에서 주어진 가상 주소에 해당하는 페이지 찾기.
+	page = spt_find_page(&thread_current()->spt, va);
+
+	// 2. 페이지가 없으면 리턴 fail 하고 끝내기
+    if (page == NULL)
+        return false;
+
+	// 3. 페이지가 존재하면 함수 호출하여 페이지를 할당 and 결과 반환
 	return vm_do_claim_page (page);
 }
 
 /* Claim the PAGE and set up the mmu. */
+/* page(va) <> frame(kva) 매핑  */
 static bool
 vm_do_claim_page (struct page *page) {
+	// 1. vm_get_frame을 호출하여 새로운 프레임을 가져온다.
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
+	// 2. 프레임과 페이지 간의 링크 설정
 	frame->page = page;
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	struct thread *current = thread_current();
+	
+	// 3. 'pml4_set_page'을 호출하여 페이지 테이블에 가상 주소와 물리 주소 간의 매핑 추가.
+	pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
 
+	// 4. 스왑 공간에서 필요한 데이터를 메모리에 로드한다.
 	return swap_in (page, frame->kva);
 }
 

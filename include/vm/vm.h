@@ -45,6 +45,8 @@ struct page {
 	void *va;              /* 가상 주소 */
 	struct frame *frame;   /* Back reference for frame */
 
+	bool writable;                            /* 페이지가 쓰기 가능한지 여부 */	
+
 	/* Your implementation */
 	struct hash_elem bucket_elem; /* 해시 테이블 요소*/
 
@@ -55,6 +57,8 @@ struct page {
 		struct uninit_page uninit;
 		struct anon_page anon;
 		struct file_page file;
+	
+	
 #ifdef EFILESYS
 		struct page_cache page_cache;
 #endif
