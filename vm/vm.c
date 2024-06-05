@@ -10,6 +10,12 @@ unsigned hash_func (const struct hash_elem *e,void *aux);
 bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 struct page * spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED);
 bool spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED);
+bool vm_claim_page (void *va);
+static struct frame *vm_get_frame (void);
+static bool vm_do_claim_page (struct page *page);
+bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
+		vm_initializer *init, void *aux);
+
 /* 추가 */
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -48,6 +54,8 @@ static struct frame *vm_evict_frame (void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+/* 어나니머스 구현*/
+/* page 구조체를 생성 and 적절한 초기화 함수 설정  */
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
@@ -57,12 +65,40 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
 	/* Check wheter the upage is already occupied or not. */
-	if (spt_find_page (spt, upage) == NULL) {
+	// 5. 페이지가 이미 존재하는 경우 에러 처리
+	if (spt_find_page (spt, upage) == NULL)
+	{
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 
+		// 1-1. 페이지 생성
+		struct page *p = (struct page *)malloc(sizeof(struct page));
+
+		// 1-2. type에 따라 초기화 함수를 가져오기
+		bool (*page_initializer)(struct page *, enum vm_type, void *);
+
+		switch (VM_TYPE(type))
+		{
+		
+		case VM_ANON: // 익명 페이지(파일 시스템과 독립적으로 존재하는 페이지 관리)
+			page_initializer = anon_initializer;
+			break;
+		
+		case VM_FILE: // 매핑된 페이지(파일의 내용을 메모리에 매핑하여 사용할 때 사용)
+			page_initializer = file_backed_initializer;
+			break;
+		}
+
+		// 2. 페이지 초기화(uninit 타입)
+		uninit_new(p, upage, init, type, aux, page_initializer);
+
+		// 3. unit_new를 호출한 후 필드 수정 - uninit_new 함수 안에서 구조체 내용이 전부 새로 할당.
+		p->writable = writable;
+
 		/* TODO: Insert the page into the spt. */
+		// 4. 초기화된 페이지 > spt에 추가.
+		return spt_insert_page(spt, p);
 	}
 err:
 	return false;
@@ -80,7 +116,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 
 	// va에 해당하는 hash_elem 찾기
 	page->va = va;
-	
+
 	e = hash_find(&spt, &page->bucket_elem);
 
 	// 있으면 e에 해당하는 페이지 반환
@@ -170,6 +206,7 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
+/* 어나니머스 구현해야 할 것 */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {

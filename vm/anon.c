@@ -25,6 +25,7 @@ vm_anon_init (void) {
 }
 
 /* Initialize the file mapping */
+/* 페이지를 익명 페이지로 초기화. */
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */

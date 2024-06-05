@@ -121,7 +121,13 @@ bool vm_try_handle_fault (struct intr_frame *f, void *addr, bool user,
 bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 		bool writable, vm_initializer *init, void *aux);
 void vm_dealloc_page (struct page *page);
+
+/* 수정 한 것 */
 bool vm_claim_page (void *va);
+static bool vm_do_claim_page (struct page *page);
+static struct frame * vm_get_frame (void);
+/* 수정 한 것 */
+
 enum vm_type page_get_type (struct page *page);
 
 
