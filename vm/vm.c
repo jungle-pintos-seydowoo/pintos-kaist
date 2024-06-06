@@ -1,13 +1,13 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
-#include "threads/malloc.h"
 #include "include/vm/vm.h"
-#include "vm/inspect.h"
+
 #include "include/lib/kernel/hash.h"
 #include "include/lib/kernel/list.h"
-#include "include/threads/vaddr.h"
 #include "include/threads/mmu.h"
-
+#include "include/threads/vaddr.h"
+#include "threads/malloc.h"
+#include "vm/inspect.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -39,6 +39,7 @@ enum vm_type page_get_type(struct page *page) {
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
+void hash_page_destroy(struct hash_elem *e, void *aux);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -63,20 +64,24 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
     // 2) type에 따라 초기화 함수를 가져오기
     bool (*page_initializer)(struct page *, enum vm_type, void *);
 
+    // 타입에 맞춰서 함수포인터에 함수 대입
     switch (VM_TYPE(type)) {
       case VM_ANON:
         page_initializer = anon_initializer;
         break;
       case VM_FILE:
         page_initializer = file_backed_initializer;
-		break;
+        break;
     }
 
     // 3) "uninit" 타입의 페이지로 초기화
+    /**
+     * @brief uninit 페이지를 초기화하면서
+     */
     uninit_new(p, upage, init, type, aux, page_initializer);
     p->writable = writable;
 
-	// 4) 생성한 페이지를 spt 에 추가
+    // 4) 생성한 페이지를 spt 에 추가
     return spt_insert_page(spt, p);
   }
 err:
@@ -161,10 +166,20 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
                          bool not_present UNUSED) {
   struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
   struct page *page = NULL;
-  /* TODO: Validate the fault */
-  /* TODO: Your code goes here */
+  if (addr == NULL) {
+    return false;
+  }
+  if (is_kernel_vaddr(addr)) return false;
 
-  return vm_do_claim_page(page);
+  if (not_present) {
+    /* TODO: Validate the fault */
+    /* TODO: Your code goes here */
+    page = spt_find_page(spt, addr);
+    if (page == NULL) return false;
+    if (write == 1 && page->writable == 0) return false;
+    return vm_do_claim_page(page);
+  }
+  return false;
 }
 
 /* Free the page.
@@ -207,12 +222,44 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED) {}
+                                  struct supplemental_page_table *src UNUSED) {
+  struct hash_iterator i;
+  hash_first(&i, &src->spt_hash); // 소스 spt의 첫번째 항목을 가져옴
+  while (hash_next(&i)) { // 해시테이블의 모든 항목 순회
+    struct page *src_page = hash_entry(hash_cur(&i), struct page, bucket_elem);
+    enum vm_type type = src_page->operations->type;
+    void *upage = src_page->va;
+    bool writable = src_page->writable;
 
+    /* 1) type 이 uninit이면 */
+    if (type == VM_UNINIT) { // 페이지가 초기화되지 않은 상태인 경우 초기화 진행
+      vm_initializer *init = src_page->uninit.init;
+      void *aux = src_page->uninit.aux;
+      vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux); // 현재는 익명 페이지 초기화만 구현되어 있음
+      continue;
+    }
+    if (!vm_alloc_page(VM_ANON, upage, writable)) {
+      return false;
+    }
+    if (!vm_claim_page(upage)) {
+      return false;
+    }
+    struct page *dst_page = spt_find_page(dst, upage);
+    memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+  }
+  return true;
+}
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
   /* TODO: Destroy all the supplemental_page_table hold by thread and
    * TODO: writeback all the modified contents to the storage. */
+  hash_clear(&spt->spt_hash, hash_page_destroy);
+}
+
+void hash_page_destroy(struct hash_elem *e, void *aux) {
+  struct page *page = hash_entry(e, struct page, bucket_elem);
+  destroy(page);
+  free(page);
 }
 
 /* page p를 위한 해시값 반환 */
