@@ -7,7 +7,9 @@
 #include "include/threads/mmu.h"
 #include "include/threads/vaddr.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 #include "vm/inspect.h"
+#include "userprog/process.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -20,6 +22,8 @@ void vm_init(void) {
   register_inspect_intr();
   /* DO NOT MODIFY UPPER LINES. */
   /* TODO: Your code goes here. */
+  list_init(&frame_table);
+  lock_init(&frame_table_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -94,12 +98,14 @@ struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
   struct page *page = NULL;
 
   // 깡통 페이지 만들기
-  page = malloc(sizeof(struct page));
+  page = (struct page *)malloc(sizeof(struct page));
   struct hash_elem *e;
-  page->va = va;
-  //
-  e = hash_find(&spt, &page->bucket_elem);
+  page->va = pg_round_down(va); // page의 시작주소 할당
+  // va에 해당하는 hash_elem 찾기
+  e = hash_find(&spt->spt_hash, &page->bucket_elem);
+  free(page);
 
+  // 있으면 e에 해당하는 페이지 반환
   return e != NULL ? hash_entry(e, struct page, bucket_elem) : NULL;
 }
 
@@ -146,8 +152,9 @@ static struct frame *vm_get_frame(void) {
   if (kva == NULL) PANIC("TODO");
 
   // 프레임 초기화
-  frame = malloc(sizeof(struct frame));
+  frame = (struct frame *)malloc(sizeof(struct frame));
   frame->kva = kva;
+  frame->page = NULL;
 
   ASSERT(frame != NULL);
   ASSERT(frame->page == NULL);
@@ -155,7 +162,9 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr UNUSED) {
+  	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+}
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page UNUSED) {}
@@ -174,6 +183,12 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   if (not_present) {
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
+    void *rsp = f->rsp;
+    if(!user) rsp = thread_current()->rsp;
+
+  if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) || (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK))
+			vm_stack_growth(addr);
+
     page = spt_find_page(spt, addr);
     if (page == NULL) return false;
     if (write == 1 && page->writable == 0) return false;
@@ -217,28 +232,31 @@ static bool vm_do_claim_page(struct page *page) {
 
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
-  hash_init(spt, hash_func, less_func, NULL);
+  hash_init(&spt->spt_hash, hash_func, less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                                   struct supplemental_page_table *src UNUSED) {
   struct hash_iterator i;
-  hash_first(&i, &src->spt_hash); // 소스 spt의 첫번째 항목을 가져옴
-  while (hash_next(&i)) { // 해시테이블의 모든 항목 순회
+  hash_first(&i, &src->spt_hash);  // 소스 spt의 첫번째 항목을 가져옴
+  while (hash_next(&i)) {          // 해시테이블의 모든 항목 순회
     struct page *src_page = hash_entry(hash_cur(&i), struct page, bucket_elem);
     enum vm_type type = src_page->operations->type;
     void *upage = src_page->va;
     bool writable = src_page->writable;
 
     /* 1) type 이 uninit이면 */
-    if (type == VM_UNINIT) { // 페이지가 초기화되지 않은 상태인 경우 초기화 진행
+    if (type ==
+        VM_UNINIT) {  // 페이지가 초기화되지 않은 상태인 경우 초기화 진행
       vm_initializer *init = src_page->uninit.init;
       void *aux = src_page->uninit.aux;
-      vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux); // 현재는 익명 페이지 초기화만 구현되어 있음
+      vm_alloc_page_with_initializer(
+          VM_ANON, upage, writable, init,
+          aux);  // 현재는 익명 페이지 초기화만 구현되어 있음
       continue;
     }
-    if (!vm_alloc_page(VM_ANON, upage, writable)) {
+    if (!vm_alloc_page(type, upage, writable)) {
       return false;
     }
     if (!vm_claim_page(upage)) {

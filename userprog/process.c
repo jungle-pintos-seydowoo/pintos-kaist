@@ -217,8 +217,7 @@ int process_exec(void *f_name) /* NOTE: 강의의 start_process() */
   _if.eflags = FLAG_IF | FLAG_MBS;
 
   /* We first kill the current context */
-  process_cleanup();
-
+  process_cleanup();  
   lock_acquire(&filesys_lock);
   /* And then load the binary */
   success = load(file_name, &_if);
@@ -228,7 +227,7 @@ int process_exec(void *f_name) /* NOTE: 강의의 start_process() */
   // sema_up(&thread_current()->load_sema);
 
   /* If load failed, quit. */
-  palloc_free_page(f_name);
+  
   if (!success) {
     free(parse);
     return -1;
@@ -240,6 +239,8 @@ int process_exec(void *f_name) /* NOTE: 강의의 start_process() */
   // hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
   _if.R.rsi = _if.rsp + sizeof(void (*)());
   _if.R.rdi = count;
+
+palloc_free_page(f_name);
 
   /* Start switched process. */
   do_iret(&_if);

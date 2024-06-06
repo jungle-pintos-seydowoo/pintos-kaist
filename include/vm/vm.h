@@ -67,6 +67,7 @@ struct page {
 struct frame {
   void *kva;
   struct page *page;
+  struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -113,9 +114,15 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+void hash_page_destroy(struct hash_elem *e, void *aux);
 
 unsigned hash_func(const struct hash_elem *p_, void *aux UNUSED);
 bool less_func(const struct hash_elem *a_, const struct hash_elem *b_,
                void *aux UNUSED);
+
+struct list swap_table;
+struct list frame_table;
+struct lock swap_table_lock;
+struct lock frame_table_lock;
 
 #endif /* VM_VM_H */
