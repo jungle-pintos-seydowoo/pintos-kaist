@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "intrinsic.h"
+#include "include/lib/user/syscall.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -142,9 +143,6 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	/* NOTE: [2.4] 페이지 폴트 발생 시 exit(-1) 호출 */
-	exit(-1);
-
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
@@ -153,6 +151,7 @@ page_fault(struct intr_frame *f)
 
 	/* Count page faults. */
 	page_fault_cnt++;
+	exit(-1); /* page fault 처리 없이 프로세스 종료 */
 
 	/* If the fault is true fault, show info and exit. */
 	printf("Page fault at %p: %s error %s page in %s context.\n",
@@ -160,5 +159,6 @@ page_fault(struct intr_frame *f)
 		   not_present ? "not present" : "rights violation",
 		   write ? "writing" : "reading",
 		   user ? "user" : "kernel");
+
 	kill(f);
 }
