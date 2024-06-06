@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "include/threads/mmu.h"
+#include "include/lib/kernel/hash.h"
 
 /* 추가 */
 unsigned hash_func (const struct hash_elem *e,void *aux);
@@ -207,15 +208,53 @@ vm_handle_wp (struct page *page UNUSED) {
 
 /* Return true on success */
 /* 어나니머스 구현해야 할 것 */
+/* 페이지 폴트 발생 시 제어권 전달 받음 */
+/* 보조 테이블(SPT)을 확인하고, 페이지가 존재x > 새로운 페이지 할당 + 매핑 */
+/* 페이지 폴트 처리 후 > 필요한 페이지가 메모리에 로드되도록 한다. */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+		bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
+{
+	// 1. SPT 참조
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	// 2. 페이지 확인 or 처리
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
 
-	return vm_do_claim_page (page);
+	// 주소 유효성 검사 
+	// 3. 주소 유효성 검사(자체가 있는지)
+	if(addr == NULL)
+	{
+		return false;
+	}
+	// 4. 커널 주소 검사(커널 주소 공간에 속했는지)
+	if (is_kernel_vaddr(addr))
+	{
+		return false; // 커널 주소 공간에 접근하려는 시도는 잘못된 접근이므로 'false' 반환
+	}
+
+	// 5. 페이지 폴트 원인 검사
+	if(not_present) // 플래그 확인하여 접근한 페이지 자체가 메모리에 존재x
+	{
+		/* TODO: Validate the fault */
+		// 6. spt에서 페이지 찾기
+		page = spt_find_page(spt, addr); // spt에서 'addr'에 해당하는 페이지 찾기
+
+		// 예외 처리(없을 경우 +  쓰기 접근 검사)
+		if(page == NULL)
+		{
+			return  false;
+		}
+
+		// 7. 쓰기 접근 and 읽기 전용 페이지
+		if(write == 1 && page->writable == 0)
+		{
+			return false; // 쓰기 접근 불가능 에러 처리
+		}
+
+		// 8. 페이지 클레임
+		return vm_do_claim_page(page); // 페이지를 할당하고 매핑.
+	}
+	 return false;
 }
 
 /* Free the page.
@@ -273,16 +312,70 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
+/* 'src'을 > 대상 보조 페이지 테이블 'dst'로 복사. 현재 실행 중인 프로세스의 페이지 테이블을 새로운 프로세스에 복사할 때 사용  */
+/* spt를 복사.(spt에서 각 페이지를 대상으로 타입 and 초기화 정보를 복사하여 대상 spt에 동일한 페이지 할당 + 초기화) */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+		struct supplemental_page_table *src UNUSED)
+{
+	// 해시 테이블 이터레이터 초기화
+	struct hash_iterator i;
+	hash_first(&i, &src->spt_hash);
+	
+	// 소스 spt의 해시 테이블 순회 > 각 페이지 처리
+	while (hash_next(&i))
+	{
+		// 소스 페이지 정보 추출
+		struct page *src_page = hash_entry(hash_cur(&i), struct page, bucket_elem);
+		enum vm_type type = src_page->operations->type; // 페이지 타입
+		void *upage = src_page->va; // 가상 주소
+		bool writable = src_page->writable; // 쓰기 가능 여부
+
+		// 1. type이 uninit이면(초기화 정보 사용하여 > 새로운 페이지 할당)
+		if(type == VM_UNINIT)
+		{
+			vm_initializer *init = src_page->uninit.init; // 초기화 함수
+			void *aux = src_page->uninit.aux; // 보조 데이터
+			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux); // 새로운 페이지를 초기화 정보와 함께 할당
+			continue; // 할당 완료시 다음 페이지로 넘어감.
+		}
+
+		// 2. type이 uninit이 아니면
+		if(!vm_alloc_page(type, upage, writable))
+		{
+			return false;
+		}
+
+		// 'vm_cliam_page' = 페이지 폴트 처리 and 메모리 로드 
+		// vm_claim_page으로 요청해서 물리 메모리 프레임에 매핑 + 페이지 초기화
+		if(!vm_claim_page(upage))
+		{
+			return false;
+		}
+
+		// 소스 페이지의 내용을 > 대상 페이지에 복사
+		struct page *dst_page = spt_find_page(dst, upage); // 복사된 페이지를 찾아서
+		memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE); // 페이지 크기만큼 데이터 복사
+	}
+	return true;
+}
+
+// 주어진 해시 요소(hash_elem) > page 제거 + 메모리 해제
+void hash_page_destroy(struct hash_elem *e, void *aux)
+{
+    struct page *page = hash_entry(e, struct page, bucket_elem);
+    destroy(page);
+    free(page);
 }
 
 /* Free the resource hold by the supplemental page table */
+/* spt제거 and 모든 페이지 해제 + 수정된 내용을 저장소에 기록 = 스레드가 종료될 때 호출되어 자원을 정리함 */
+/* 이를 통해 스레드 종료 시 보조 테이블이 적절하게 제거 > 메모리 누수 방지 */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	hash_clear(&spt->spt_hash, hash_page_destroy); // 해시 테이블의 모든 요소 제거
 }
 
 // 가상 주소를 해시 값으로 변환하여 해시 테이블에서 빠르게 검색할 수 있도록

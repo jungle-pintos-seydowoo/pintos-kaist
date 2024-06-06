@@ -47,6 +47,7 @@ hash_init (struct hash *h,
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), yields undefined behavior,
    whether done in DESTRUCTOR or elsewhere. */
+// spt->spt_hash 해시 테이블을 순회하며, 각 요소에 대해 hash_page_destroy 콜백 함수를 호출 > 모든 페이지 제거 + 메로리 해제
 void
 hash_clear (struct hash *h, hash_action_func *destructor) {
 	size_t i;

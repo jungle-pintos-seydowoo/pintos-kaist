@@ -67,8 +67,8 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
-	struct page *page;
+	void *kva; // 커널 가상 주소
+	struct page *page; // 페이지 구조체를 담기 위한 멤버 변수
 };
 
 /* The function table for page operations.

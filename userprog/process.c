@@ -26,6 +26,9 @@
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
 
+/* 3-2-4에 필요함. */
+#include "include/vm/vm.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -738,21 +741,32 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
-/* 어나니머스 구현해야 할 것 */
+// 사용자 스택을 할당 and 페이지 테이블에 매핑하여 스택 포인터 초기화.
+/*
+'vm_alloc_page'를 사용하여 페이지 직접 할당.
+'install_page'를 사용하여 페이지 매핑
+ */
 static bool
 setup_stack(struct intr_frame *if_)
 {
-	uint8_t *kpage;
-	bool success = false;
+	// 1. 변수 선언
+	uint8_t *kpage; // 새로 할당된 페이지를 가리키는 포인터.
+	bool success = false; 
 
+	// 2. 페이지 할당(사용자 영역에서 새로운 페이지 할당. 플래그 사용 0으로 초기화)
 	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+
+	// 3. 페이지 매핑
 	if (kpage != NULL)
 	{
+		// 페이지 테이블에 매핑 추가.
 		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
+		
+		// 4. 스택 포인터 초기화
 		if (success)
 			if_->rsp = USER_STACK;
 		else
-			palloc_free_page(kpage);
+			palloc_free_page(kpage); // 매핑이 실패하면, 할당된 페이지 해제
 	}
 	return success;
 }
@@ -872,6 +886,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+/*
+어나니머스 구현해야 할 것
+사용자 스택을 할당 and 페이지 테이블에 매핑하여 스택 포인터 초기화.
+
+vm_alloc_page를 사용하여 페이지를 할당.
+vm_claim_page를 사용하여 페이지를 매핑(할당된 페이지에 물리 프레임을 매핑)
+VM_MARKER_0를 사용하여 페이지가 스택 페이지임을 마킹 - 페이지 폴트 처리 시 페이지가 어떤 용도로 사용되는지 쉽게 구분
+*/
 static bool
 setup_stack(struct intr_frame *if_)
 {
@@ -883,6 +905,25 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 
+	/*
+	stack_bottom에 스택을 매핑하고 페이지를 즉시 요청.
+    성공하면, rsp를 그에 맞게 설정. 페이지가 스택임을 표시해야함.
+	*/
+
+	// VM_ANON | VM_MARKER_0 플래그 사용하여 페이지가 스택 페이지임을 표시.
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1))
+	{
+		// 2. 할당 받은 페이지에 바로 (물리) 프레임 매핑
+		success = vm_claim_page(stack_bottom);
+		
+		// 3. rsp(스택 포인터) 변경. (argument_stack에서 이 위치부터 인자 push)
+		if (success)
+		{
+			if_->rsp = USER_STACK;
+		}
+
+	}
 	return success;
 }
+
 #endif /* VM */
