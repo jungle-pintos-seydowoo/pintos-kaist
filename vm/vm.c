@@ -5,7 +5,8 @@
 #include "vm/inspect.h"
 #include "include/threads/mmu.h"
 #include "include/lib/kernel/hash.h"
-
+#include "threads/thread.h"
+#include "userprog/process.h"
 /* 추가 */
 unsigned hash_func (const struct hash_elem *e,void *aux);
 bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
@@ -31,6 +32,8 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
+	lock_init(&frame_table_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -116,9 +119,10 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct hash_elem *e;
 
 	// va에 해당하는 hash_elem 찾기
-	page->va = va;
+	page->va = pg_round_down(va);
 
-	e = hash_find(&spt, &page->bucket_elem);
+	e = hash_find(&spt->spt_hash, &page->bucket_elem);
+	free(page);
 
 	// 있으면 e에 해당하는 페이지 반환
 	return e != NULL ? hash_entry(e, struct page, bucket_elem) : NULL;
@@ -133,7 +137,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	int succ = false;
 	/* TODO: Fill this function. */
 
-	return hash_insert(&spt, &page->bucket_elem) == NULL ? true : false; // 존재하지 않을 경우에만 삽입
+	return hash_insert(&spt->spt_hash, &page->bucket_elem) == NULL ? true : false; // 존재하지 않을 경우에만 삽입
 }
 
 void
@@ -183,11 +187,15 @@ vm_get_frame (void) {
 	}
 
 	// 4. 프레임 구조체 할당
-	frame = malloc(sizeof(struct frame)); // 페이지 사이즈만큼 메모리 할당
+	frame = (struct frame *)malloc(sizeof(struct frame)); // 페이지 사이즈만큼 메모리 할당
 
 	// 5. 프레임 멤버 초기화
-	frame->kva = kva;  
-
+	frame->kva = kva;
+	frame->page = NULL;
+	lock_acquire(&frame_table_lock);
+	list_push_back(&frame_table, &frame->frame_elem);
+	lock_release(&frame_table_lock);
+	
 	// 6. 유효성 검사
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -308,7 +316,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init(spt, hash_func, page_less, NULL);
+	hash_init(&spt->spt_hash, hash_func, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -321,7 +329,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	// 해시 테이블 이터레이터 초기화
 	struct hash_iterator i;
 	hash_first(&i, &src->spt_hash);
-	
+
 	// 소스 spt의 해시 테이블 순회 > 각 페이지 처리
 	while (hash_next(&i))
 	{
