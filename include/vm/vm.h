@@ -69,6 +69,7 @@ struct page {
 struct frame {
 	void *kva; // 커널 가상 주소
 	struct page *page; // 페이지 구조체를 담기 위한 멤버 변수
+	struct list_elem frame_elem; // frame_table을 위한 list_elem
 };
 
 /* The function table for page operations.
@@ -130,5 +131,8 @@ static struct frame * vm_get_frame (void);
 
 enum vm_type page_get_type (struct page *page);
 
+
+ struct list frame_table;
+ struct lock frame_table_lock;
 
 #endif  /* VM_VM_H */
