@@ -95,14 +95,16 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
                            void *va UNUSED) {
-  struct page *page = NULL;
+  
 
   // 깡통 페이지 만들기
-  page = (struct page *)malloc(sizeof(struct page));
-  struct hash_elem *e;
-  page->va = pg_round_down(va); // page의 시작주소 할당
+  struct page *page = (struct page *)malloc(sizeof(struct page));
+  
+  // page의 시작주소 할당
+  page->va = pg_round_down(va);
+
   // va에 해당하는 hash_elem 찾기
-  e = hash_find(&spt->spt_hash, &page->bucket_elem);
+  struct hash_elem *e = hash_find(&spt->spt_hash, &page->bucket_elem);
   free(page);
 
   // 있으면 e에 해당하는 페이지 반환
