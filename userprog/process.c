@@ -787,6 +787,8 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 
+	
+
 	struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)aux;
 
 	file_seek(lazy_load_arg->file, lazy_load_arg->ofs);

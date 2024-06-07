@@ -103,6 +103,8 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	struct hash_elem *e;
 
 	/* 할당한 page의 va 값 할당 후, 해당 va에 해당하는 elem 찾기 */
+	/* pg_round_down: 가장 가까운 페이지 경계로 반올림 */
+	/* 사용자가 원하는 임의의 가상 주소에 접근 시, 해당 주소가 포함된 page의 시작 주소를 찾기 위해 진행 */
 	page->va = pg_round_down(va);
 	e = hash_find(&spt->spt_hash, &page->bucket_elem);
 	free(page);
@@ -125,7 +127,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
-	//hash_delete(&spt->spt_hash, &page->bucket_elem);
+	// hash_delete(&spt->spt_hash, &page->bucket_elem);
 	vm_dealloc_page(page);
 	return true;
 }
@@ -192,6 +194,8 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	/* addr을 PGSIZE 만큼 내려 anon page를 할당 */
+	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -216,12 +220,21 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	{
 		return false;
 	}
-	
+
 	/* 접근한 메모리의 물리 프레임이 존재하지 않는 경우, not_present = true */
 	if (not_present)
 	{
 		void *rsp = f->rsp;
-		if(!user) rsp = thread_current()->rsp;
+		if (!user)
+			rsp = thread_current()->rsp;
+
+		/* stack growth로 처리할 수 있는 경우 */
+		if(USER_STACK - (1<<20) <= rsp -8 && rsp -8 == addr && addr <= USER_STACK){
+			vm_stack_growth(addr);
+		}
+		else if(USER_STACK - (1<<20) <= rsp && rsp <= addr && addr <= USER_STACK){
+			vm_stack_growth(addr);
+		}
 
 		/* spt에서 해당 가상 주소에 해당하는 페이지 반환 */
 		page = spt_find_page(spt, addr);
