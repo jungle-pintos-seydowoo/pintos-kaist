@@ -16,6 +16,7 @@
 #include "userprog/process.h"
 #include "devices/input.h"
 #include "threads/palloc.h"
+#include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -79,6 +80,9 @@ void syscall_handler(struct intr_frame *f)
 	// NOTE: [2.X] Your implementation goes here.
 	/* TODO: [2.5] fork 추가 */
 	uint64_t syscall_num = f->R.rax;
+	#ifdef VM
+		thread_current()->rsp = f->rsp;
+	#endif
 
 	switch (syscall_num)
 	{

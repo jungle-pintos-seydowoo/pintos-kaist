@@ -185,10 +185,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
   if (not_present) {
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
-    void *rsp = f->rsp;
+
+    /* USERPROG의 스택 포인터 가져오기 */
+    void *rsp = f->rsp; 
     if(!user) rsp = thread_current()->rsp;
 
-  if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) || (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK))
+    /* 페이지 폴트가 stack_growth으로 처리할 수 있는 지 확인 후 stack_growth 하기 */
+    if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) || (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK))
 			vm_stack_growth(addr);
 
     page = spt_find_page(spt, addr);
