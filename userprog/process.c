@@ -176,7 +176,9 @@ static void __do_fork(void *aux) {
     if (file > 2) file = file_duplicate(file);
     current->fdt[i] = file;
   }
+  lock_acquire(&filesys_lock);
   sema_up(&current->load_sema);
+  lock_release(&filesys_lock);
   process_init();
 
   /* Finally, switch to the newly created process. */
