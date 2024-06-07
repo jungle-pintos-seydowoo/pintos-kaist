@@ -205,8 +205,14 @@ vm_get_frame (void) {
 }
 
 /* Growing the stack. */
+// 주어진 주소가 더 이상 예외 주소가 되지 않도록 스택의 크기를 증가시키기 위해 anon page를 할당.
 static void
 vm_stack_growth (void *addr UNUSED) {
+	/* 
+	todo : 스택 크기를 증가시키기 위해 anon page를 하나 이상 할당하여 주어진 주소(addr)가 더 이상 예외 주소(faulted address)가 되지 않도록 한다. 
+	todo : 할당할 때 addr을 PGSIZE로 내림하여 처리.
+	*/
+	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -244,6 +250,28 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if(not_present) // 플래그 확인하여 접근한 페이지 자체가 메모리에 존재x
 	{
 		/* TODO: Validate the fault */
+
+		void *rsp = f->rsp; // user access인 경우 rsp는 유저 스택을 가리킴
+
+		if (!user)
+		{
+			rsp = thread_current()->rsp;
+
+		}
+
+		/* 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth 호출 */
+
+		// 스택 확장 가능 범위 인지 and 폴트가 발생한 주소가 스택확장으로 해결 가능한지 and 폴트가 발생한 주소가 사용자 스택 범위 안에 있는지
+		if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) 
+		{
+			vm_stack_growth(addr);
+		}
+		// 위에랑 차이점은 현재 가운데 - 현재 스택 포인터보다 높은 주소 체크
+		else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
+		{
+			 vm_stack_growth(addr);
+		}
+
 		// 6. spt에서 페이지 찾기
 		page = spt_find_page(spt, addr); // spt에서 'addr'에 해당하는 페이지 찾기
 

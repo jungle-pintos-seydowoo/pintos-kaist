@@ -147,6 +147,7 @@ struct thread
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
+	void *rsp; // 현재 유저 스택의 스택 포인터를 저장해두기 위한 필드를 thread 구조체에 추가.
 #endif
 
 	/* Owned by thread.c. */
