@@ -18,7 +18,7 @@ static const struct page_operations file_ops = {
     .type = VM_FILE,
 };
 
-/* The initializer of file vm */
+/* TODO: The initializer of file vm */
 void vm_file_init(void) {}
 
 /* Initialize the file backed page */
@@ -27,6 +27,13 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva) {
   page->operations = &file_ops;
 
   struct file_page *file_page = &page->file;
+  // TODO: page struct 일부 정보를 업데이트
+  struct lazy_load_arg *lazy_load_arg =
+      (struct lazy_load_arg *)page->uninit.aux;
+  file_page->file = lazy_load_arg->file;
+  file_page->ofs = lazy_load_arg->ofs;
+  file_page->read_bytes = lazy_load_arg->read_bytes;
+  file_page->zero_bytes = lazy_load_arg->zero_bytes;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -39,9 +46,15 @@ static bool file_backed_swap_out(struct page *page) {
   struct file_page *file_page UNUSED = &page->file;
 }
 
-/* Destory the file backed page. PAGE will be freed by the caller. */
+/* TODO: Destory the file backed page. PAGE will be freed by the caller. */
 static void file_backed_destroy(struct page *page) {
   struct file_page *file_page UNUSED = &page->file;
+  if (pml4_is_dirty(thread_current()->pml4, page->va)) {
+    file_write_at(file_page->file, page->va, file_page->read_bytes,
+                  file_page->ofs);
+    pml4_set_dirty(thread_current()->pml4, page->va, 0);
+  }
+  pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 /* TODO: Do the mmap */
@@ -88,4 +101,15 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
 }
 
 /* TODO: Do the munmap */
-void do_munmap(void *addr) {}
+void do_munmap(void *addr) {
+  struct supplemental_page_table *spt = &thread_current()->spt;
+  struct page *p = spt_find_page(spt, addr);
+  int count = p->mapped_page_count;
+  for (int i = 0; i < count; i++) {
+    if (p) {
+      destroy(p);
+    }
+    addr += PGSIZE;
+    p = spt_find_page(spt, addr);
+  }
+}

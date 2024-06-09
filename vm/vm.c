@@ -8,8 +8,8 @@
 #include "include/threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
-#include "vm/inspect.h"
 #include "userprog/process.h"
+#include "vm/inspect.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -95,11 +95,9 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
                            void *va UNUSED) {
-  
-
   // 깡통 페이지 만들기
   struct page *page = (struct page *)malloc(sizeof(struct page));
-  
+
   // page의 시작주소 할당
   page->va = pg_round_down(va);
 
@@ -165,7 +163,7 @@ static struct frame *vm_get_frame(void) {
 
 /* Growing the stack. */
 static void vm_stack_growth(void *addr UNUSED) {
-  	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+  vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -187,12 +185,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     /* TODO: Your code goes here */
 
     /* USERPROG의 스택 포인터 가져오기 */
-    void *rsp = f->rsp; 
-    if(!user) rsp = thread_current()->rsp;
+    void *rsp = f->rsp;
+    if (!user) rsp = thread_current()->rsp;
 
-    /* 페이지 폴트가 stack_growth으로 처리할 수 있는 지 확인 후 stack_growth 하기 */
-    if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) || (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK))
-			vm_stack_growth(addr);
+    /* 페이지 폴트가 stack_growth으로 처리할 수 있는 지 확인 후 stack_growth
+     * 하기 */
+    if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr &&
+         addr <= USER_STACK) ||
+        (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK))
+      vm_stack_growth(addr);
 
     page = spt_find_page(spt, addr);
     if (page == NULL) return false;
@@ -260,7 +261,23 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
           VM_ANON, upage, writable, init,
           aux);  // 현재는 익명 페이지 초기화만 구현되어 있음
       continue;
+    } else if (type == VM_FILE) {
+      struct lazy_load_arg *file_aux = malloc(sizeof(struct lazy_load_arg));
+      file_aux->file = src_page->file.file;
+      file_aux->ofs = src_page->file.ofs;
+      file_aux->read_bytes = src_page->file.read_bytes;
+      file_aux->zero_bytes = src_page->file.zero_bytes;
+      if (!vm_alloc_page_with_initializer(type, upage, writable, NULL,
+                                          file_aux))
+        return false;
+      struct page *file_page = spt_find_page(dst, upage);
+      file_backed_initializer(file_page, type, NULL);
+      file_page->frame = src_page->frame;
+      pml4_set_page(thread_current()->pml4, file_page->va, src_page->frame->kva,
+                    src_page->writable);
+      continue;
     }
+
     if (!vm_alloc_page(type, upage, writable)) {
       return false;
     }

@@ -62,6 +62,7 @@ void check_address(void *addr);
 
 /* Virtual Memory */
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 void syscall_init(void) {
   write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 | ((uint64_t)SEL_KCSEG)
@@ -132,6 +133,9 @@ void syscall_handler(struct intr_frame *f) {
       break;
     case SYS_MMAP:  // 14
       f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+      break;
+    case SYS_MUNMAP:  // 15
+      munmap(f->R.rdi);
       break;
   }
 }
@@ -358,4 +362,8 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 
   // 인자들이 유효성 검사를 모두 통과한 경우 do_mmap() 호출
   return do_mmap(addr, length, writable, f, offset); // 파일이 매핑 된 가상주소 반환
+}
+/** @brief 매핑해제 */
+void munmap(void *addr){
+  do_munmap(addr);
 }
