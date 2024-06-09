@@ -60,6 +60,7 @@ static void file_backed_destroy(struct page *page) {
 /* TODO: Do the mmap */
 void *do_mmap(void *addr, size_t length, int writable, struct file *file,
               off_t offset) {
+  /* 파일 열기 및 페이지를 가져오는 데에 필요한 데이터 넣기 */
   // 파일 열기
   struct file *f = file_reopen(file);
   void *start_addr = addr;
@@ -67,13 +68,18 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
   int total_page_count = length <= PGSIZE  ? 1
                          : length % PGSIZE ? length / PGSIZE + 1
                                            : length / PGSIZE;
+  // 읽어야 할 바이트 크기
   size_t read_bytes = file_length(f) < length ? file_length(f) : length;
+  // 마지막 페이지에서 0으로 초기화해야 할 영역 바이트의 크기
   size_t zero_bytes = PGSIZE - read_bytes % PGSIZE;
 
+  // 계산식이 맞는지 확인
   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+  // addr과 offset이 page-aligned가 되었는지 확인
   ASSERT(pg_ofs(addr) == 0);
   ASSERT(offset % PGSIZE == 0);
 
+  /*  */
   while (read_bytes > 0 || zero_bytes > 0) {
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
@@ -84,19 +90,21 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
     lazy_load_arg->ofs = offset;
     lazy_load_arg->read_bytes = page_read_bytes;
     lazy_load_arg->zero_bytes = page_zero_bytes;
-
+ 
     if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable,
                                         lazy_load_segment, lazy_load_arg)) {
       return NULL;
     }
-    struct page *p = spt_find_page(&thread_current()->spt, start_addr);
-    p->mapped_page_count = total_page_count;
 
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
     addr += PGSIZE;
     offset += page_read_bytes;
   }
+  
+  struct page *p = spt_find_page(&thread_current()->spt, start_addr);
+  p->mapped_page_count = total_page_count;
+
   return start_addr;
 }
 

@@ -51,7 +51,7 @@ void hash_page_destroy(struct hash_elem *e, void *aux);
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     bool writable, vm_initializer *init,
                                     void *aux) {
-  ASSERT(VM_TYPE(type) != VM_UNINIT)
+  ASSERT(VM_TYPE(type) != VM_UNINIT);
 
   struct supplemental_page_table *spt = &thread_current()->spt;
 
@@ -79,9 +79,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
     }
 
     // 3) "uninit" 타입의 페이지로 초기화
-    /**
-     * @brief uninit 페이지를 초기화하면서
-     */
     uninit_new(p, upage, init, type, aux, page_initializer);
     p->writable = writable;
 
