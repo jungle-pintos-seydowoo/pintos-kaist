@@ -15,6 +15,8 @@ int process_add_file(struct file *f);
 struct file *process_get_file(int fd);
 void process_close_file(int fd);
 
+/* 3-4 mmf */
+bool lazy_load_segment(struct page *page, void *aux);
 
 struct lazy_load_arg
 {

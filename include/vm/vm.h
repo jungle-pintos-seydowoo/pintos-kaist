@@ -50,6 +50,8 @@ struct page {
 	/* Your implementation */
 	struct hash_elem bucket_elem; /* 해시 테이블 요소*/
 
+	int mapped_page_count;
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	// 멤버 보유
@@ -57,7 +59,6 @@ struct page {
 		struct uninit_page uninit;
 		struct anon_page anon;
 		struct file_page file;
-	
 	
 #ifdef EFILESYS
 		struct page_cache page_cache;

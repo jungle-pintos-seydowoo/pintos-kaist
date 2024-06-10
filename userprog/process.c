@@ -795,7 +795,7 @@ install_page(void *upage, void *kpage, bool writable)
  * upper block. */
 /* 어나니머스 구현해야 할 것 */
 // 첫 번째 페이지 폴트가 발생할 때 호출되어 파일에서 데이터를 읽어와 페이지에 로드하는 역할
-static bool
+bool
 lazy_load_segment(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
