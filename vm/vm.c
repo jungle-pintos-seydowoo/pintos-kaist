@@ -21,8 +21,8 @@ void vm_init(void)
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
-	list_init(&frame_table);
-	lock_init(&frame_table_lock);
+	// list_init(&frame_table);
+	// lock_init(&frame_table_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -181,9 +181,9 @@ vm_get_frame(void)
 	frame->kva = kva;
 	frame->page = NULL;
 
-	lock_acquire(&frame_table_lock);
-	list_push_back(&frame_table, &frame->frame_elem);
-	lock_release(&frame_table_lock);
+	// lock_acquire(&frame_table_lock);
+	// list_push_back(&frame_table, &frame->frame_elem);
+	// lock_release(&frame_table_lock);
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);

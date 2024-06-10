@@ -129,7 +129,7 @@ uint64_t hash_func(const struct hash_elem *e, void *aux);
 bool less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 void hash_page_destroy(struct hash_elem *e, void *aux);
 
-struct list frame_table;
-struct lock frame_table_lock;
+// struct list frame_table;
+// struct lock frame_table_lock;
 
 #endif /* VM_VM_H */

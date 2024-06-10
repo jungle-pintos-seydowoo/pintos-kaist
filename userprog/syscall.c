@@ -261,7 +261,19 @@ int filesize(int fd)
 /* NOTE: [2.4] read() 시스템 콜 구현 */
 int read(int fd, void *buffer, unsigned size)
 {
-	check_address(buffer);
+	/* read 시스템 콜은 파일에서 데이터를 읽어와 메모리 버퍼에 저장하는 함수인데 */
+	/* spt_find_page를 통해서 buffer 주소에 대한 page를 얻어왔을 때 */
+	/* 해당 페이지가 not writable한다면, 즉 buffer에 읽어온 데이터를 쓸 수 없다면, exit */
+	struct page *page = spt_find_page(&thread_current()->spt, buffer);
+	if (page){
+		if (!page->writable) {
+			exit(-1);
+		}
+	}
+
+	if (!is_user_vaddr(buffer) || buffer == NULL){
+		exit(-1);
+	}
 
 	/* 파일에 동시 접근이 일어날 수 있으므로 Lock 사용 */
 	lock_acquire(&filesys_lock);
@@ -350,7 +362,9 @@ void close(int fd)
 /* NOTE: [2.2] 추가 함수 - 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수 */
 void check_address(void *addr)
 {
-	if (addr == NULL || is_kernel_vaddr(addr))
+	struct thread *current = thread_current();
+
+	if (addr == NULL || is_kernel_vaddr(addr) || pml4_get_page(current->pml4, addr) == NULL)
 		exit(-1);
 }
 
