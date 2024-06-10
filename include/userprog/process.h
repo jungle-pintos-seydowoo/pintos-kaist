@@ -3,6 +3,8 @@
 
 #include "threads/thread.h"
 
+struct lock filesys_lock;
+
 /* lazy_load_segment에 넘겨줄 보조 인자들을 저장할 구조체 */
 struct lazy_load_arg
 {
@@ -23,4 +25,7 @@ struct thread *get_child_process(int pid);
 int process_add_file(struct file *f);
 struct file *process_get_file(int fd);
 void process_close_file(int fd);
+
+bool lazy_load_segment(struct page *page, void *aux);
+
 #endif /* userprog/process.h */
