@@ -244,7 +244,19 @@ int filesize(int fd) {
 
 /* NOTE: [2.4] read() 시스템 콜 구현 */
 int read(int fd, void *buffer, unsigned size) {
-  check_address(buffer);
+  // check_address(buffer);
+
+  // 버퍼에 페이지를 받아옴
+  struct page *page = spt_find_page(&thread_current()->spt, buffer);
+  if (page) {
+    if (!page->writable) {
+      exit(-1);
+    }
+  }
+
+  if (!is_user_vaddr(buffer) || buffer == NULL) {
+    exit(-1);
+  }
 
   /* 파일에 동시 접근이 일어날 수 있으므로 Lock 사용 */
   lock_acquire(&filesys_lock);
@@ -356,14 +368,13 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
   }
 
   // 파일의 크기가 0이거나 읽으려는 길이가 0과 같거나 작은 경우
-  if(file_length(f) == 0 || (int)length <= 0){
-	return NULL;
+  if (file_length(f) == 0 || (int)length <= 0) {
+    return NULL;
   }
 
   // 인자들이 유효성 검사를 모두 통과한 경우 do_mmap() 호출
-  return do_mmap(addr, length, writable, f, offset); // 파일이 매핑 된 가상주소 반환
+  return do_mmap(addr, length, writable, f,
+                 offset);  // 파일이 매핑 된 가상주소 반환
 }
 /** @brief 매핑해제 */
-void munmap(void *addr){
-  do_munmap(addr);
-}
+void munmap(void *addr) { do_munmap(addr); }
