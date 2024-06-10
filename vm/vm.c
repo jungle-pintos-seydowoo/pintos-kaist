@@ -121,17 +121,36 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 static struct frame *vm_get_victim(void) {
   struct frame *victim = NULL;
   /* TODO: The policy for eviction is up to you. */
+  struct thread *curr = thread_current();
 
+  lock_acquire(&frame_table_lock);
+  struct list_elem *start = list_begin(&frame_table);
+  for (start; start != list_end(&frame_table); start = list_next(start)) {
+    victim = list_entry(start, struct frame, frame_elem);
+    if (victim->page ==
+        NULL)  // frame에 할당된 페이지가 없는 경우 (page가 destroy된 경우 )
+    {
+      lock_release(&frame_table_lock);
+      return victim;
+    }
+    if (pml4_is_accessed(curr->pml4, victim->page->va))
+      pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    else {
+      lock_release(&frame_table_lock);
+      return victim;
+    }
+  }
+  lock_release(&frame_table_lock);
   return victim;
 }
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *vm_evict_frame(void) {
-  struct frame *victim UNUSED = vm_get_victim();
+  struct frame *victim = vm_get_victim();
   /* TODO: swap out the victim and return the evicted frame. */
-
-  return NULL;
+  if (victim->page) swap_out(victim->page);
+  return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
