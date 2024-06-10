@@ -71,6 +71,12 @@ struct frame {
   struct list_elem frame_elem;
 };
 
+struct slot{
+  struct page *page;
+  uint32_t slot_no;
+  struct list_elem swap_elem; // frame_table을 위한 list_elem
+};
+
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.
  * Put the table of "method" into the struct's member, and
