@@ -164,9 +164,13 @@ static struct frame *vm_get_frame(void) {
    * 반환) */
   void *kva = palloc_get_page(PAL_USER);
 
-  // 할당 가능한 페이지가 없는 경우 패닉
-  if (kva == NULL) PANIC("TODO");
-
+  // 할당 가능한 페이지가 없는 경우 교체정책하기
+	if (kva == NULL) // page 할당 실패
+	{
+		struct frame *victim = vm_evict_frame();
+		victim->page = NULL;
+		return victim;
+	}
   // 프레임 초기화
   frame = (struct frame *)malloc(sizeof(struct frame));
   frame->kva = kva;
