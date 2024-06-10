@@ -17,6 +17,9 @@
 #include "devices/input.h"
 #include "threads/palloc.h"
 
+/* 3-4 mmf시 필요한. */
+#include "include/vm/file.h"
+
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
@@ -56,6 +59,10 @@ bool create(const char *file, unsigned initial_size);
 bool remove(const char *file);
 
 void check_address(void *addr);
+
+/* 3-4 mmf */
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+
 
 void syscall_init(void)
 {
@@ -127,6 +134,16 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_CLOSE: // 13
 		close(f->R.rdi);
+		break;
+
+	// 3-4 mmf 추가
+	
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 	}
 }
@@ -341,4 +358,38 @@ void check_address(void *addr)
 {
 	if (addr == NULL || is_kernel_vaddr(addr))
 		exit(-1);
+}
+
+/* 3-4 mmf구현 */
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	/* 매핑이 이루어질 수 없는 경우(8가지)  */
+    if (!addr || addr != pg_round_down(addr)) // addr이 없거나 addr이 page-aligend 되지 않은 경우
+        return NULL;
+
+    if (offset != pg_round_down(offset)) // offset이 page-aligned되지 않은 경우
+        return NULL;
+
+    if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length)) // addr or addr + length 가 > 유저 영역이 아닌 경우
+        return NULL;
+
+    if (spt_find_page(&thread_current()->spt, addr)) // addr에 할당된 페이지가 이미 존재하는 경우
+        return NULL;
+
+    struct file *f = process_get_file(fd);
+    if (f == NULL) // fd에 해당하는 파일이 없는 경우
+        return NULL;
+
+    if (file_length(f) == 0 || (int)length <= 0) // file의 길이가 0 or 0보다 작은 경우
+        return NULL;
+
+	// 위의 경우를 제외하고, do_mmap() 호출하여 파일과 가상 주소간의 매핑 진행. 
+
+    return do_mmap(addr, length, writable, f, offset); // 파일이 매핑된 가상 주소 반환
+}
+
+void munmap(void *addr)
+{
+	do_munmap(addr);
 }
