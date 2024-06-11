@@ -267,7 +267,18 @@ int filesize(int fd)
 /* NOTE: [2.4] read() 시스템 콜 구현 */
 int read(int fd, void *buffer, unsigned size)
 {
-	check_address(buffer);
+	// check_address(buffer);
+	
+	struct page *page = spt_find_page(&thread_current()->spt, buffer);
+	if (page){
+		if (!page->writable) {
+			exit(-1);
+		}
+	}
+
+	if (!is_user_vaddr(buffer) || buffer == NULL){
+		exit(-1);
+	}
 
 	/* 파일에 동시 접근이 일어날 수 있으므로 Lock 사용 */
 	lock_acquire(&filesys_lock);
