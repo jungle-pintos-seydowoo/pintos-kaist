@@ -147,11 +147,54 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 }
 
 /* Get the struct frame, that will be evicted. */
+/*
+페이지 교체 알고리즘에 따라 희생할 프레임을 선택하는 역할.
+접근 비트를 이용한 Second Chance 알고리즘 사용
+*/ 
+
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
 
+	// 현재 실행 중인 스레드 가져옴.
+	struct thread *curr = thread_current();
+
+	// 1. 프레임 테이블 접근을 보호하기 위해 락을 흭득
+	lock_acquire(&frame_table_lock);
+
+	struct list_elem *start = list_begin(&frame_table);
+
+	// 2. 프레임 테이블을 순회하며 희생할 프레임을 찾음.
+	for (start; start != list_end(&frame_table); start = list_next(start))
+	{
+		// 3. 프레임 선택 
+		victim = list_entry(start, struct frame, frame_elem);
+
+		// 4. 할당되지 않은 프레임 확인.
+		if (victim->page == NULL)
+		{
+			lock_release(&frame_table_lock);
+			return victim; // 프레임이 할당되지 않은 경우, 해당 프레임을 바로 반환
+		}
+
+		// 5. 접근 비트 확인
+		if (pml4_is_accessed(curr->pml4, victim->page->va))
+		{
+			// 6. 접근 비트 초기화
+			pml4_set_accessed(curr->pml4, victim->page->va, 0);
+		}
+		
+		// 7. 접근되지 않은 프레임 선택
+		else
+		{
+			// 8. 락 해제 or 반환
+			lock_release(&frame_table_lock);
+			return victim;
+		}
+
+	}
+	lock_release(&frame_table_lock);
 	return victim;
 }
 
@@ -159,10 +202,21 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+
+	// 1. 희생 프레임 선택(페이지 교체 정책에 따라 프레임 선택)
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
 
-	return NULL;
+
+	// 2. 희생 프레임의 페이지가 존재하는 경우
+	if (victim->page)
+	{
+		swap_out(victim->page); // 스왑아웃
+	}
+
+	// 3. 희생 프레임 반환 - 이제 물리 메모리에서 해제된 상태이므로, 새로운 페이지를 이 프레임에 매핑할 수 있다.
+	return victim;
+
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -183,7 +237,9 @@ vm_get_frame (void) {
 	// 3. 페이지 할당 실패 처리
 	if(kva == NULL)
 	{
-		PANIC("todo"); // 나중에는 swap out 기능을 구현한 후에는 이 부분 수정 예정
+		struct frame *victim = vm_evict_frame();
+		victim->page = NULL;
+		return victim;
 	}
 
 	// 4. 프레임 구조체 할당
