@@ -49,15 +49,33 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 } 
 
 /* Swap in the page by read contents from the file. */
+// 파일에서 내용을 읽어와 페이지를 스왑 인. 'lazy_load_segment' 함수를 호출하여 페이지의 내용을 파일에서 읽어옴
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+	return lazy_load_segment(page, file_page);
 }
 
 /* Swap out the page by writeback contents to the file. */
+// 페이지의 내용을 파일에 다시 기록 + 페이지 and 프레임의 연결을 끊기
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	// 1. 페이지가 수정된 경우, 내용을 파일에 기록
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs ); // 페이지의 내용을 파일에 기록
+		pml4_set_dirty(thread_current()->pml4, page->va, 0); // 페이지의 수정 플래그 초기화
+	}
+
+	// 2. 페이지와 프레임의 연결 끊기 - 이는 페이지가 더 이상 해당 프레임 사용x
+	page->frame->page = NULL;
+	page->frame = NULL;
+
+	// 3. 페이지 테이블에서 페이지 제거
+	pml4_clear_page(thread_current()->pml4, page->va);
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
