@@ -6,9 +6,9 @@
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
-static bool anon_swap_in (struct page *page, void *kva);
-static bool anon_swap_out (struct page *page);
-static void anon_destroy (struct page *page);
+static bool anon_swap_in(struct page *page, void *kva);
+static bool anon_swap_out(struct page *page);
+static void anon_destroy(struct page *page);
 
 /* DO NOT MODIFY this struct */
 static const struct page_operations anon_ops = {
@@ -27,9 +27,16 @@ void vm_anon_init(void)
 	list_init(&swap_table);
 	lock_init(&swap_table_lock);
 
+	/* 1페이지 당 필요한 sector 개수?
+	hdd 경우 disk_sector가 512byte의 고정적 크기를 가짐
+	가상 페이지의 경우 4kb니까 총 8개의 disk_sector에 나뉘어 저장하게 됨 */
+
+	/* swap_size: 스왑 디스크 안에서 만들 수 있는 총 스왑 슬롯 개수
+	-> 스왑 공간 크기 / 1페이지 당 필요한 sector 개수 */
 	disk_sector_t swap_size = disk_size(swap_disk) / 8;
 	for (disk_sector_t i = 0; i < swap_size; i++)
 	{
+		/* 만들 수 있는 slot 개수 만큼 만들어 swap_table에 세팅 */
 		struct slot *slot = (struct slot *)malloc(sizeof(struct slot));
 		slot->page = NULL;
 		slot->slot_num = i;
