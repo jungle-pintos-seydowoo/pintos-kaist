@@ -73,6 +73,15 @@ struct frame {
 	struct list_elem frame_elem; // frame_table을 위한 list_elem
 };
 
+struct slot
+{
+	struct page *page;
+	uint32_t slot_no;
+	struct list_elem swap_elem;
+};
+
+
+
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.
  * Put the table of "method" into the struct's member, and
@@ -135,5 +144,9 @@ enum vm_type page_get_type (struct page *page);
 
  struct list frame_table;
  struct lock frame_table_lock;
+
+ /* 스왑 관련된 구조체 초기화 */
+ struct list swap_table;
+ struct lock swap_table_lock;
 
 #endif  /* VM_VM_H */
