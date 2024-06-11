@@ -2,6 +2,7 @@
 
 #include "devices/disk.h"
 #include "vm/vm.h"
+#include "include/threads/mmu.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -25,6 +26,7 @@ void vm_anon_init(void) {
   lock_init(&swap_table_lock);
 
   disk_sector_t swap_size = disk_size(swap_disk) / 8;
+  
   for (disk_sector_t i = 0; i < swap_size; i++) {
     struct slot *slot = (struct slot *)malloc(sizeof(struct slot));
     slot->page = NULL;
@@ -41,6 +43,8 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
   page->operations = &anon_ops;
 
   struct anon_page *anon_page = &page->anon;
+  anon_page->slot_no = -1;
+  return true;
 }
 
 /* Swap in the page by read contents from the swap disk. */
@@ -105,4 +109,19 @@ static bool anon_swap_out(struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void anon_destroy(struct page *page) {
   struct anon_page *anon_page = &page->anon;
+  struct list_elem *e;
+	struct slot *slot;
+
+	// 차지하던 slot 반환
+	lock_acquire(&swap_table_lock);
+	for (e = list_begin(&swap_table); e != list_end(&swap_table); e = list_next(e))
+	{
+		slot = list_entry(e, struct slot, swap_elem);
+		if (slot->slot_no == anon_page->slot_no)
+		{
+			slot->page = NULL;
+			break;
+		}
+	}
+	lock_release(&swap_table_lock);
 }
