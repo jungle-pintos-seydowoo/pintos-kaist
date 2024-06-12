@@ -141,10 +141,16 @@ vm_get_victim(void)
 	struct thread *curr = thread_current();
 
 	lock_acquire(&frame_table_lock);
-	struct list_elem *start = list_begin(&frame_table);
-	for (start; start != list_end(&frame_table); start = list_next(start))
+
+	/* 페이지 교체 정책: clock_algorithm */
+	/* evict_start: 최근에 교체됐던 페이지의 다음 페이지 */
+	/* temp를 두는 이유: evict_start 그 자체로 탐색을 하면 첫 번째 for문을 다 돈 다음
+					  다음 for문에서 어디까지 돌아야 할 지 애매해짐 = temp로 돔으로써 evict_start의 유지 */
+	struct list_elem *temp = evict_start;
+
+	for (temp; temp != list_end(&frame_table); temp = list_next(temp))
 	{
-		victim = list_entry(start, struct frame, frame_elem);
+		victim = list_entry(temp, struct frame, frame_elem);
 
 		if (victim->page == NULL)
 		{
@@ -161,11 +167,31 @@ vm_get_victim(void)
 		{
 			/* 최근에 accessed 된 경우가 아니라면, accessed bit(0) = swap out될 대상이 됨 */
 			lock_release(&frame_table_lock);
+			evict_start = list_next(temp);
+			return victim;
+		}
+	}
+
+	for (temp = list_begin(&frame_table); temp != evict_start; temp = list_next(&frame_table))
+	{
+		victim = list_entry(temp, struct frame, frame_elem);
+
+		if (pml4_is_accessed(curr->pml4, victim->page->va))
+		{
+			/* set_accessed로 accessed bit를 1에서 0으로 설정한 후 넘어감 */
+			pml4_set_accessed(curr->pml4, victim->page->va, 0);
+		}
+		else
+		{
+			/* 최근에 accessed 된 경우가 아니라면, accessed bit(0) = swap out될 대상이 됨 */
+			lock_release(&frame_table_lock);
+			evict_start = list_next(temp);
 			return victim;
 		}
 	}
 
 	lock_release(&frame_table_lock);
+	evict_start = list_next(evict_start);
 	return victim;
 }
 
@@ -216,7 +242,14 @@ vm_get_frame(void)
 	frame->page = NULL;
 
 	lock_acquire(&frame_table_lock);
-	list_push_back(&frame_table, &frame->frame_elem);
+	
+  if(list_empty(&frame_table)){
+    list_push_back(&frame_table, &frame->frame_elem);
+    evict_start = list_begin(&frame_table);
+  }else{
+    list_push_back(&frame_table, &frame->frame_elem);
+  }
+
 	lock_release(&frame_table_lock);
 
 	ASSERT(frame != NULL);

@@ -146,4 +146,6 @@ struct lock frame_table_lock;
 struct list swap_table;
 struct lock swap_table_lock;
 
+struct list_elem *evict_start;
+
 #endif /* VM_VM_H */

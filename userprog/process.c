@@ -780,24 +780,25 @@ install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-bool
-lazy_load_segment(struct page *page, void *aux)
+bool lazy_load_segment(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 
-	
-
 	struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)aux;
 
+	/* file의 offset을 lazy_load_arg의 ofs으로 이동시킴(읽기 시작할 위치) */
 	file_seek(lazy_load_arg->file, lazy_load_arg->ofs);
 
+	/* 페이지에 매핑된 물리 메모리의 프레임에 이동시킨 ofs에서부터 파일의 데이터를 읽어옴 */
+	/* 제대로 읽어오지 못 했다면 -> 해당 페이지를 Free 시키고 False 반환 */
 	if (file_read(lazy_load_arg->file, page->frame->kva, lazy_load_arg->read_bytes) != (int)(lazy_load_arg->read_bytes))
 	{
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
+	/* 남는 부분은 0으로 초기화 */
 	memset(page->frame->kva + lazy_load_arg->read_bytes, 0, lazy_load_arg->zero_bytes);
 
 	return true;
