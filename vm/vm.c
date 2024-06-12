@@ -200,6 +200,11 @@ vm_get_victim (void) {
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
+/*
+가상 메모리 시스템에서 페이지 교체.
+메모리 > 디스크로 내보내느 과정. 새로운 페이지를 메모리에 불러올 때 사용.
+희생 프레임 선택 > 선택된 프레임을 스왑 아웃 후 > 반환.
+*/ 
 static struct frame *
 vm_evict_frame (void) {
 

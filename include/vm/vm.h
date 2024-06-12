@@ -73,6 +73,7 @@ struct frame {
 	struct list_elem frame_elem; // frame_table을 위한 list_elem
 };
 
+// swap 관련 slot 구조체 초기화
 struct slot
 {
 	struct page *page;
