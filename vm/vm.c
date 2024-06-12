@@ -428,12 +428,13 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		}
 
 		/* 부모 type의 초기화 함수를 담은 uninit page로 초기화 후 */
-		/* page fault 처리 (vm_claim_page) 후 memcpy */
+		/* page fault 처리 (vm_claim_page) 후, 즉 페이지와 프레임을 매핑해준 후 */
 		if (!vm_claim_page(upage))
 		{
 			return false;
 		}
 
+		/* memcpy로 매핑된 프레임에 내용을 복사 */
 		struct page *dst_page = spt_find_page(dst, upage);
 		memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
 	}
